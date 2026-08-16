@@ -1,11 +1,12 @@
+# Agent / local tooling (never ship)
+.atl/
+.engram/
+.codegraph/
+
+# Runtime / secrets
 node_modules/
 dist/
-coverage/
 .env
-.env.*
-!.env.example
+.env.local
 *.log
-.DS_Store
-.vscode/
-.idea/
-*.tsbuildinfo
+

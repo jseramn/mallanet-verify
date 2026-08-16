@@ -1,145 +1,82 @@
-# Mallanet Verify MCP
+# Mayanet Verify MCP
 
-Public MCP server for **Mallanet** NGO volunteer integrity checks. It cross-checks declared registration data against Colombian official sources via [Croma](https://docs.usecroma.com) and produces a **Pass / Alert / Fail** report.
+Stdio MCP server that verifies Mayanet volunteers against Colombian public sources (Croma) and persists Pass / Alert / Fail reports in an isolated Neon `verify` schema. Intake (`public.volunteers`) is never altered.
 
-License: MIT · Owner: [jseramn](https://github.com/jseramn) · Name: **Mallanet** (not Mayanet)
+License: MIT.
 
 ## Requirements
 
-- Node.js **20+**
-- Optional: `CROMA_API_KEY` (org key from [platform.usecroma.com](https://platform.usecroma.com))
-- Optional: `DATABASE_URL` (Neon / Postgres). If unset, an **in-memory** store is used.
+- Node.js 20 or newer
+- A **verify-scoped** Postgres role (`DATABASE_URL`) with DML on `verify` only — no runtime DDL, no access to other schemas
+- A Croma API key (`CROMA_API_KEY`)
 
-## Quick start (judge path)
+Copy `.env.example` and fill in values locally. Do not commit secrets.
+
+```
+DATABASE_URL=<verify-scoped-postgres-url>
+CROMA_API_KEY=<croma-api-key>
+```
+
+## Apply the schema once
+
+Runtime never runs DDL. Apply the isolated schema once against the verify-scoped database:
 
 ```bash
-git clone https://github.com/jseramn/mallanet-verify.git
-cd mallanet-verify
-npm install
-cp .env.example .env   # then set CROMA_API_KEY
-npm test
-npm run build
-npm run dev            # stdio MCP server
+psql "$DATABASE_URL" -f sql/001_verify_schema.sql
 ```
 
-Sample demo cédula (always seeded):
+Rollback: `DROP SCHEMA verify CASCADE`. Do not `ALTER` `public.volunteers`.
 
-```text
-1127938850
-```
+## Run in Cursor (stdio)
 
-## Environment
-
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `CROMA_API_KEY` | No | Enables live Croma lookups. If missing, Croma checks return **Skipped** gracefully. |
-| `DATABASE_URL` | No | Neon/Postgres URL. Uses schema **`verify`** only. Falls back to memory if unset or connect fails. |
-| `CROMA_BASE_URL` | No | Default `https://api.croma.run` |
-
-**Hard rule:** this server never `ALTER`s or writes to `public.volunteers`. Persistence lives in `verify.volunteers`.
-
-No secrets are committed. Use `.env` locally (gitignored).
-
-## MCP tools
-
-| Tool | What it does |
-| --- | --- |
-| `list_pending_volunteers` | List volunteers with status `pending` or `data_requested` |
-| `get_volunteer` | Fetch by `volunteer_id` or `document_number` |
-| `request_verification_data` | Mark `data_requested` + return checklist / missing fields |
-| `check_croma_background` | Call Croma: judicial, criminal records, Procuraduría, RUES |
-| `validate_linkedin` | URL + name↔slug consistency (**no LinkedIn scraping**) |
-| `generate_report` | Build Pass/Alert/Fail report from stored / provided evidence |
-| `verify_volunteer` | End-to-end: Croma + LinkedIn + persist report |
-
-### Report checks
-
-Each report includes:
-
-- `judicial` — Rama Judicial cases by name
-- `criminal_records` — Policía Nacional antecedentes
-- `procuraduria` — Procuraduría SIRI
-- `rues` — RUES entity search (when `company_name` is declared)
-- `linkedin_consistency` — declared `/in/` URL vs name tokens (no scraping)
-
-Overall = worst of the five (`Fail` > `Alert` > `Pass`; `Skipped` does not fail the volunteer by itself).
-
-## Cursor / Claude Desktop config (stdio)
+1. `npm install` in this repo.
+2. Open Cursor Settings → MCP, or edit `~/.cursor/mcp.json` (user) / `.cursor/mcp.json` (project).
+3. Add a **stdio** server that spawns this process (absolute `cwd`):
 
 ```json
 {
   "mcpServers": {
-    "mallanet-verify": {
-      "command": "node",
-      "args": ["/absolute/path/to/mallanet-verify/dist/index.js"],
-      "env": {
-        "CROMA_API_KEY": "croma_live_..."
-      }
-    }
-  }
-}
-```
-
-Or during development:
-
-```json
-{
-  "mcpServers": {
-    "mallanet-verify": {
+    "mayanet-verify": {
       "command": "npx",
-      "args": ["tsx", "/absolute/path/to/mallanet-verify/src/index.ts"],
+      "args": ["tsx", "src/index.ts"],
+      "cwd": "/absolute/path/to/mallanet-verify",
       "env": {
-        "CROMA_API_KEY": "croma_live_..."
+        "DATABASE_URL": "<verify-scoped-postgres-url>",
+        "CROMA_API_KEY": "<croma-api-key>"
       }
     }
   }
 }
 ```
 
-## Example tool calls
+The process speaks MCP over stdin/stdout. Missing `DATABASE_URL` or `CROMA_API_KEY` aborts before tools register. Restart Cursor (or reload MCP) after editing the config.
 
-List pending (includes demo CC `1127938850`):
-
-```json
-{ "name": "list_pending_volunteers", "arguments": {} }
-```
-
-Verify the demo volunteer:
-
-```json
-{
-  "name": "verify_volunteer",
-  "arguments": { "document_number": "1127938850" }
-}
-```
-
-Validate LinkedIn only (no scraping):
-
-```json
-{
-  "name": "validate_linkedin",
-  "arguments": {
-    "full_name": "JOSE RAMON DEMO",
-    "linkedin_url": "https://www.linkedin.com/in/jose-ramon-demo"
-  }
-}
-```
-
-## Croma references
-
-- Docs: https://docs.usecroma.com
-- MCP endpoint (upstream): https://docs.usecroma.com/mcp-server
-- This project is a **separate** Mallanet-owned stdio MCP that *calls* Croma’s REST API when `CROMA_API_KEY` is set.
-
-## Development
+Manual smoke (stdin close exits):
 
 ```bash
-npm install
-npm test
-npm run typecheck
-npm run build
+printf '' | DATABASE_URL="<verify-scoped-postgres-url>" CROMA_API_KEY="<croma-api-key>" npx tsx src/index.ts
 ```
 
-## License
+## Tools
 
-MIT © jseramn / Mallanet
+Each tool is independently callable. `verify_volunteer` orchestrates Croma + LinkedIn URL normalize + persist; you can still call the source tools alone.
+
+| Tool | Input (placeholders) | Role |
+|------|----------------------|------|
+| `list_pending_volunteers` | `{ "limit": 20, "status_filter": "pending" }` | Volunteers with no report row |
+| `get_volunteer` | `{ "volunteer_id": "<volunteer-id>" }` | One `verify.volunteers` row |
+| `request_verification_data` | `{ "volunteer_id": "<volunteer-id>", "document_type": "CC", "document_number": "<document-number>", "linkedin_url": "https://www.linkedin.com/in/example" }` | Bind identity; never log the number |
+| `check_croma_background` | `{ "document_number": "<document-number>", "name": "<full-name>", "nit": "<nit>", "employer": "<employer>" }` | Policía, Procuraduría, Rama; RUES only if NIT/employer |
+| `validate_linkedin` | `{ "linkedin_url": "https://www.linkedin.com/in/example", "volunteer_id": "<volunteer-id>" }` | Normalize URL only; no profile fetch |
+| `generate_report` | `{ "volunteer_id": "<volunteer-id>" }` | Persist overall + per-check |
+| `verify_volunteer` | `{ "volunteer_id": "<volunteer-id>" }` | Orchestrator |
+
+Name/org mismatch on RUES is Alert, not Fail. LinkedIn stays Alert until a consented profile check exists.
+
+## Tests
+
+```bash
+npx vitest run
+```
+
+No live Croma in CI. Optional DB tests use `DATABASE_URL` against `verify` only.

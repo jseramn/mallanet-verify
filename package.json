@@ -1,43 +1,25 @@
 {
   "name": "mallanet-verify",
-  "version": "1.0.0",
-  "description": "Mallanet Verify — MCP server for NGO volunteer integrity checks (Croma + declared data)",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
   "license": "MIT",
-  "author": "jseramn",
   "engines": {
     "node": ">=20"
   },
-  "bin": {
-    "mallanet-verify": "./dist/index.js"
-  },
-  "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:db": "vitest run src/db"
   },
-  "keywords": [
-    "mallanet",
-    "mcp",
-    "volunteer",
-    "verification",
-    "croma",
-    "colombia"
-  ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "pg": "^8.16.3",
-    "zod": "^3.25.76"
+    "@modelcontextprotocol/server": "^2.0.0",
+    "postgres": "^3.4.9",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^22.17.0",
-    "@types/pg": "^8.15.5",
-    "tsx": "^4.20.3",
+    "@types/node": "^24.2.1",
+    "tsx": "^4.23.12",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.10"
   }
 }

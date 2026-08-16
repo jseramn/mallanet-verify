@@ -1,37 +1,19 @@
-#!/usr/bin/env node
-/**
- * Mallanet Verify — MCP stdio server
- * Public volunteer integrity checks for Mallanet (NGO).
- */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createStore } from "./lib/store.js";
-import { CromaClient } from "./lib/croma.js";
-import { registerTools } from "./tools/register.js";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { createRuntimeContext, createVerifyServer } from "./server.js";
 
-async function main(): Promise<void> {
-  const store = await createStore(process.env.DATABASE_URL);
-  const croma = new CromaClient();
-
-  const server = new McpServer({
-    name: "mallanet-verify",
-    version: "1.0.0",
-  });
-
-  registerTools(server, store, croma);
-
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  const shutdown = async () => {
-    await store.close();
-    process.exit(0);
-  };
-  process.on("SIGINT", () => void shutdown());
-  process.on("SIGTERM", () => void shutdown());
+export function requireEnv(env: NodeJS.Dict<string> = process.env) {
+  const DATABASE_URL = env.DATABASE_URL;
+  const CROMA_API_KEY = env.CROMA_API_KEY;
+  if (!DATABASE_URL) throw new Error("DATABASE_URL is required");
+  if (!CROMA_API_KEY) throw new Error("CROMA_API_KEY is required");
+  return { DATABASE_URL, CROMA_API_KEY };
 }
 
-main().catch((err) => {
-  console.error("[mallanet-verify] fatal:", err);
-  process.exit(1);
-});
+export function start(env: NodeJS.Dict<string> = process.env) {
+  const resolved = requireEnv(env);
+  serveStdio(() => createVerifyServer(createRuntimeContext(resolved)));
+}
+
+if (!process.env.VITEST) {
+  start();
+}
